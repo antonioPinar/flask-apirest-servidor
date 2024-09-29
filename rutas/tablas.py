@@ -5,31 +5,40 @@ from modelos.tabla import TablaDeSurfModelo, db
 tablas_bp = Blueprint('tablas', __name__)
 
 # Constantes para validaciones
-TIPOS_VALIDOS = ['Shortboard', 'Longboard', 'Fish', 'Funboard', 'Gun']
-QUILLAS_VALIDAS = ['Tri-fin', 'Quad', 'Single']
+TIPOS_VALIDOS = ['shortboard', 'longboard', 'fish', 'funboard', 'gun']
+QUILLAS_VALIDAS = ['tri-fin', 'quad', 'single']
 
 
 # Funciones auxiliares
 #Valida si el tipo proporcionado es válido.
 def validar_tipo(tipo):
+    tipo = tipo.lower()
     if tipo not in TIPOS_VALIDOS:
-        return False, {'message': f'Tipo inválido. Los tipos válidos son: {", ".join(TIPOS_VALIDOS)}'}, 400
+        return False, [{'message': f'Tipo inválido. Los tipos válidos son: {", ".join(TIPOS_VALIDOS)}'}, 400]
     return True, None
 
 
 #Valida si las quillas proporcionadas son válidas.
 def validar_quillas(quillas):
     if not isinstance(quillas, list):
-        return False, {'message': 'El campo quillas debe ser una lista'}, 400
+        return False, [{'message': 'El campo quillas debe ser una lista'}, 400]
+    # Limpiar la lista: eliminar espacios y convertir a minúsculas
+    quillas = [quilla.lower() for quilla in quillas]
+    # Verifica si hay elementos duplicados
+    if len(quillas) != len(set(quillas)):
+        return False, [{'message': 'No se permiten opciones de quillas duplicadas'}, 400]
+    # Verifica si hay más de 3 quillas
     if len(quillas) > 3:
-        return False, {'message': 'Solo se permiten hasta 3 opciones de quillas'}, 400
+        return False, [{'message': 'Solo se permiten hasta 3 opciones de quillas'}, 400]
+    # Verifica que las quillas sean válidas
     for quilla in quillas:
         if quilla not in QUILLAS_VALIDAS:
-            return False, {'message': f'Quilla inválida. Las opciones válidas son: {", ".join(QUILLAS_VALIDAS)}'}, 400
+            return False, [{'message': f'Quilla inválida. Las opciones válidas son: {", ".join(QUILLAS_VALIDAS)}'}, 400]
+    
     return True, None
 
-# Rutas
 
+# Rutas
 
 #Obtener todas las tablas o una por ID.
 @tablas_bp.route('/tablas', methods=['GET'])
