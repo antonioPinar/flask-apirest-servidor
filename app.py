@@ -2,7 +2,9 @@ from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_restful import Api
 from config import Config
-from modelos.tabla import db
+from database import db
+from modelos.tabla_surf import TablaDeSurfModelo
+from modelos.tipo_quillas import QuillaModelo
 from rutas.tablas import tablas_bp
 
 def create_app():

@@ -1,11 +1,8 @@
-from flask_sqlalchemy import SQLAlchemy
+from database import db
+from modelos.tipo_quillas import QuillaModelo
 
-# Inicializamos SQLAlchemy
-db = SQLAlchemy()
-
-# Modelo de la tabla de surf
 class TablaDeSurfModelo(db.Model):
-    __tablename__ = 'tablas_de_surf'
+    __tablename__ = 'tablas_surf'
     
     id = db.Column(db.Integer, primary_key=True)
     nombre = db.Column(db.String(80), nullable=False)
@@ -16,14 +13,13 @@ class TablaDeSurfModelo(db.Model):
     volumen = db.Column(db.Float, nullable=False)
     tipo = db.Column(db.String(20), nullable=False)
     material = db.Column(db.String(20), nullable=False)
-    quillas = db.Column(db.String(50), nullable=False)
+    quillas = db.relationship('QuillaModelo', backref='tabla_surf', lazy=True, cascade="all, delete-orphan")
     precio = db.Column(db.Float, nullable=False)
     estado = db.Column(db.String(10), nullable=False)
     descripcion = db.Column(db.String(200), nullable=True)
 
     def to_dict(self):
         return {
-            'id': self.id,
             'nombre': self.nombre,
             'marca': self.marca,
             'longitud': self.longitud,
@@ -32,7 +28,7 @@ class TablaDeSurfModelo(db.Model):
             'volumen': self.volumen,
             'tipo': self.tipo,
             'material': self.material,
-            'quillas': self.quillas.split(','),
+            'quillas': [quilla.to_dict() for quilla in self.quillas],
             'precio': self.precio,
             'estado': self.estado,
             'descripcion': self.descripcion
