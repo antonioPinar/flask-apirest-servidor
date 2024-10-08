@@ -1,4 +1,5 @@
 from database import db
+from sqlalchemy.orm import joinedload
 from modelos.tabla_surf import TablaDeSurfModelo
 from modelos.tipo_quillas import QuillaModelo
 
@@ -8,24 +9,29 @@ QUILLAS_VALIDAS = ['Tri-fin', 'Quad', 'Single']
 
 
 # Funciones auxiliares
-#Normaliza un string según el tipo especificado
-def normalizar_string(valor, tipo):
+# Normaliza un string según el tipo especificado
+def normalizar_string(valor, tipo='lower'):
     if not isinstance(valor, str):
         return valor  # Devolver el valor original si no es un string
+    
+    valor = valor.strip()
     if tipo == 'capitalize':
-        return valor.strip().capitalize()
+        return valor.capitalize()
     elif tipo == 'title':
-        return valor.strip().title()
+        return valor.title()
     elif tipo == 'lower':
-        return valor.strip().lower()
-    return valor
+        return valor.lower()
+    else:
+        raise ValueError(f"Tipo de normalización '{tipo}' no soportado")
 
 
 #Valida si el tipo proporcionado es válido.
 def validar_tipo(tipo):
     tipo = normalizar_string(tipo, 'capitalize')
+
     if tipo not in TIPOS_VALIDOS:
         return False, [{'message': f'Tipo inválido. Los tipos válidos son: {", ".join(TIPOS_VALIDOS)}'}, 400]
+    
     return True, None
 
 
@@ -34,8 +40,7 @@ def validar_quillas(quillas):
     if not isinstance(quillas, list):
         return False, [{'message': 'El campo quillas debe ser una lista'}, 400]
     
-    tiposQuilla = [quilla['tipo'] for quilla in quillas]
-    tiposQuilla = [normalizar_string(tipo, 'capitalize') for tipo in tiposQuilla]
+    tiposQuilla = [normalizar_string(quilla['tipo'], 'capitalize') for quilla in quillas]
     # Verifica si hay elementos duplicados
     if len(tiposQuilla) != len(set(tiposQuilla)):
         return False, [{'message': 'No se permiten opciones de quillas duplicadas'}, 400]
@@ -54,6 +59,9 @@ def validar_quillas(quillas):
 def normalizar_datos(data):
     dataFormateada = {}
     quillasFormateadas = []
+
+    # Primero normalizamos los campo clave
+    data = {normalizar_string(clave, 'lower'): valor for clave, valor in data.items()}
 
     # Iterar sobre las columnas del modelo TablaDeSurfModelo
     for columnaTabla in TablaDeSurfModelo.__table__.columns:
@@ -101,3 +109,25 @@ def normalizar_datos(data):
             return False, error
 
     return True, dataFormateada
+
+
+# Realiza la consulta a la base de datos dependiendo del parámetro proporcionado.
+# - Si tabla_id está presente, obtiene la tabla por ID.
+# - Si campo y valor están presentes, realiza un filtro específico.
+# - Si ninguno está presente, obtiene todas las tablas.
+def consultar_tablas(tabla_id=None, campo=None, valor=None):
+
+    if tabla_id:
+        return TablaDeSurfModelo.query.get(tabla_id)
+
+    if campo and valor:
+        if campo == 'quillas':
+            # Filtrar por tipo de quilla usando join de modelos
+            return TablaDeSurfModelo.query.options(joinedload(TablaDeSurfModelo.quillas)).join(QuillaModelo).filter(QuillaModelo.tipo == valor).all()
+        else:
+            # Filtrar por los campos de la tabla de surf
+            return TablaDeSurfModelo.query.filter(getattr(TablaDeSurfModelo, campo) == valor).all()
+
+    # Si no hay filtros, devuelve todas las tablas
+    return TablaDeSurfModelo.query.all()
+    

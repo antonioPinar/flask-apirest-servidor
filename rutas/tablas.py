@@ -1,54 +1,46 @@
 from flask import Blueprint, request, jsonify
 from database import db
+from sqlalchemy.exc import SQLAlchemyError
 from modelos.tabla_surf import TablaDeSurfModelo
 from modelos.tipo_quillas import QuillaModelo
-from rutas.func_aux import normalizar_datos, normalizar_string
+from rutas.func_aux import normalizar_datos, consultar_tablas, normalizar_string
 
 # Crear un Blueprint para las rutas de tablas
 tablas_bp = Blueprint('tablas', __name__)
 
 # Métodos CRUD
-#Obtener todas las tablas o una por ID.
+# Maneja las solicitudes GET para obtener tablas de surf.
 @tablas_bp.route('/tablas', methods=['GET'])
 @tablas_bp.route('/tablas/<int:tabla_id>', methods=['GET'])
-def get_tablas(tabla_id=None):
-    if tabla_id:
-        tabla = TablaDeSurfModelo.query.get(tabla_id)
-        if tabla:
-            return jsonify(tabla.to_dict()), 200
-        return {'message': 'Tabla de surf no encontrada'}, 404
-    tablas = TablaDeSurfModelo.query.all()
-    return jsonify([tabla.to_dict() for tabla in tablas]), 200
+@tablas_bp.route('/tablas/<string:campo>/<string:valor>', methods=['GET'])
+def get_tablas(tabla_id=None, campo=None, valor=None):
+    try:
+        # Normalizamos los datos de busqueda
+        campo = normalizar_string(campo, 'lower')
+        valor = normalizar_string(valor, 'lower')
 
+        tablas = consultar_tablas(tabla_id, campo, valor)
 
-#Obtener tablas filtradas por tipo.
-@tablas_bp.route('/tablas/tipo/<string:tipo>', methods=['GET'])
-def get_tablas_por_tipo(tipo):
-    tipo = normalizar_string(tipo, 'lower')
-    tablas = TablaDeSurfModelo.query.filter_by(tipo=tipo).all()
-    if not tablas:
-        return {'message': 'No se encontraron tablas de surf con ese tipo'}, 404
-    return jsonify([tabla.to_dict() for tabla in tablas]), 200
+        if not tablas:
+            if tabla_id:
+                return {'message': 'Tabla de surf no encontrada'}, 404
+            return {'message': f'No se encontraron tablas de surf filtradas por el campo {campo} con valor {valor}'}, 404
+        
+        if tabla_id:
+            return jsonify(tablas.to_dict()), 200
 
+        # Retornamos la lista de diccionarios de tablas
+        return jsonify([tabla.to_dict() for tabla in tablas]), 200
 
-#Obtener tablas filtradas por marca.
-@tablas_bp.route('/tablas/marca/<string:marca>', methods=['GET'])
-def get_tablas_por_marca(marca):
-    marca = normalizar_string(marca, 'lower')
-    tablas = TablaDeSurfModelo.query.filter_by(marca=marca).all()
-    if not tablas:
-        return {'message': 'No se encontraron tablas de surf con esa marca'}, 404
-    return jsonify([tabla.to_dict() for tabla in tablas]), 200
-
-
-#Obtener tablas filtradas por quillas.
-@tablas_bp.route('/tablas/quillas/<string:quilla>', methods=['GET'])
-def get_tablas_por_quillas(quilla):
-    quilla = normalizar_string(quilla, 'lower')
-    tablas = TablaDeSurfModelo.query.join(QuillaModelo).filter(QuillaModelo.tipo == quilla).all()
-    if not tablas:
-        return {'message': 'No se encontraron tablas de surf con ese ajuste de quillas'}, 404
-    return jsonify([tabla.to_dict() for tabla in tablas]), 200
+    except SQLAlchemyError as e:
+        # Devolver un error de base de datos si ocurre un problema
+        return {'error': 'Error al acceder a la base de datos', 'detalles': str(e)}, 500
+    except AttributeError as e:
+        # Devolver un error si ocurre un problema de acceso a atributos
+        return {'error': f'El campo filtrado {campo} no es válido', 'detalles': str(e)}, 400
+    except Exception as e:
+        # Capturar cualquier otra excepción inesperada
+        return {'error': 'Error interno del servidor', 'detalles': str(e)}, 500
 
 
 #Crear una nueva tabla de surf.
@@ -66,7 +58,7 @@ def create_tabla():
         if not valido:
             return datosFormateados  # Devolver error de validación si lo hay
 
-        nueva_tabla = TablaDeSurfModelo(
+        nuevaTabla = TablaDeSurfModelo(
             nombre = datosFormateados['nombre'],
             marca = datosFormateados['marca'],
             longitud = datosFormateados['longitud'],
@@ -80,8 +72,8 @@ def create_tabla():
             descripcion = datosFormateados.get('descripcion', '')
         )
         
-        db.session.add(nueva_tabla)
-        db.session.flush()  # Asegura que nueva_tabla obtenga un ID antes de asociar las quillas
+        db.session.add(nuevaTabla)
+        db.session.flush()  # Asegura que nuevaTabla obtenga un ID antes de asociar las quillas
 
         # Manejar el campo 'quillas', si está presente
         quillas_data = datosFormateados.get('quillas', [])
@@ -96,13 +88,13 @@ def create_tabla():
                 tipo = tipo,
                 material = material,
                 longitud = longitud,
-                tabla_de_surf_id = nueva_tabla.id
+                tabla_de_surf_id = nuevaTabla.id
             )
 
-            nueva_tabla.quillas.append(quilla_obj)  # Agregar la quilla a la relación
+            nuevaTabla.quillas.append(quilla_obj)  # Agregar la quilla a la relación
 
         db.session.commit()
-        return {'message': 'Tabla de surf creada correctamente', 'data': nueva_tabla.to_dict()}, 201
+        return {'message': 'Tabla de surf creada correctamente', 'data': nuevaTabla.to_dict()}, 201
     
     except KeyError as e:
         db.session.rollback()
@@ -117,7 +109,7 @@ def create_tabla():
 @tablas_bp.route('/tablas/<int:tabla_id>', methods=['PUT'])
 def update_tabla(tabla_id):
     
-    tabla = TablaDeSurfModelo.query.get(tabla_id)
+    tabla = consultar_tablas(tabla_id)
     if not tabla:
         return {'message': 'Tabla de surf no encontrada'}, 404
 
@@ -185,6 +177,9 @@ def update_tabla(tabla_id):
     except KeyError as e:
         db.session.rollback()
         return {'error': f'Campo requerido faltante: {str(e)}'}, 400
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        return {'error': 'Error al acceder a la base de datos', 'detalles': str(e)}, 500
     except Exception as e:
         db.session.rollback()
         return {'error': f'Error interno del servidor: {str(e)}'}, 500
