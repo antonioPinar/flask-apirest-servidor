@@ -56,7 +56,7 @@ def create_tabla():
         # Normalizar y validar datos
         valido, datosFormateados = normalizar_datos(data)
         if not valido:
-            return datosFormateados  # Devolver error de validación si lo hay
+            return datosFormateados, 400  # Devolver error de validación si lo hay
 
         nuevaTabla = TablaDeSurfModelo(
             nombre = datosFormateados['nombre'],
@@ -119,7 +119,7 @@ def update_tabla(tabla_id):
         # Normalizar y validar datos
         valido, datosFormateados = normalizar_datos(data)
         if not valido:
-            return datosFormateados  # Devolver error de validación si lo hay
+            return datosFormateados, 400  # Devolver error de validación si lo hay
 
         # Manejar el campo 'quillas', si está presente
         if 'quillas' in datosFormateados:

@@ -30,7 +30,7 @@ def validar_tipo(tipo):
     tipo = normalizar_string(tipo, 'capitalize')
 
     if tipo not in TIPOS_VALIDOS:
-        return False, [{'message': f'Tipo inválido. Los tipos válidos son: {", ".join(TIPOS_VALIDOS)}'}, 400]
+        return False, {'message': f'Tipo inválido. Los tipos válidos son: {", ".join(TIPOS_VALIDOS)}'}
     
     return True, None
 
@@ -38,19 +38,19 @@ def validar_tipo(tipo):
 #Valida si las quillas proporcionadas son válidas.
 def validar_quillas(quillas):
     if not isinstance(quillas, list):
-        return False, [{'message': 'El campo quillas debe ser una lista'}, 400]
+        return False, {'message': 'El campo quillas debe ser una lista'}
     
     tiposQuilla = [normalizar_string(quilla['tipo'], 'capitalize') for quilla in quillas]
     # Verifica si hay elementos duplicados
     if len(tiposQuilla) != len(set(tiposQuilla)):
-        return False, [{'message': 'No se permiten opciones de quillas duplicadas'}, 400]
+        return False, {'message': 'No se permiten opciones de quillas duplicadas'}
     # Verifica si hay más de 3 quillas
     if len(tiposQuilla) > 3:
-        return False, [{'message': 'Solo se permiten hasta 3 opciones de quillas'}, 400]
+        return False, {'message': 'Solo se permiten hasta 3 opciones de quillas'}
     # Verifica que las quillas sean válidas
     for tipoQuilla in tiposQuilla:
         if tipoQuilla not in QUILLAS_VALIDAS:
-            return False, [{'message': f'Quilla inválida. Las opciones válidas son: {", ".join(QUILLAS_VALIDAS)}'}, 400]
+            return False, {'message': f'Quilla inválida. Las opciones válidas son: {", ".join(QUILLAS_VALIDAS)}'}
     
     return True, None
 
@@ -60,41 +60,52 @@ def normalizar_datos(data):
     dataFormateada = {}
     quillasFormateadas = []
 
-    # Primero normalizamos los campo clave
+    # Primero normalizamos los campos clave
     data = {normalizar_string(clave, 'lower'): valor for clave, valor in data.items()}
 
-    # Iterar sobre las columnas del modelo TablaDeSurfModelo
-    for columnaTabla in TablaDeSurfModelo.__table__.columns:
-        campoTabla = columnaTabla.name  # El nombre de la columna
+    # Obtener las columnas del modelo TablaDeSurfModelo y sus columnas relacion
+    columnasTabla = {columna.name: columna for columna in TablaDeSurfModelo.__table__.columns}
+    relacionesTabla = {relacion.key: relacion for relacion in TablaDeSurfModelo.__mapper__.relationships}
 
-        # Comprobar si el campo está presente en el diccionario de datos
-        if campoTabla in data:
-            # Normalizamos el dato si es de tipo string
+    # Iterar sobre el diccionario de datos
+    for campoTabla, valorTabla in data.items():
+        # Verificar si el campo existe como una columna en el modelo
+        if campoTabla in columnasTabla:
+            columnaTabla = columnasTabla[campoTabla]
+            # Normalizar el dato si es de tipo string
             if isinstance(columnaTabla.type, db.String):
-                dataFormateada[campoTabla] = normalizar_string(data[campoTabla], 'lower' if campoTabla != 'descripcion' else 'capitalize')
+                dataFormateada[campoTabla] = normalizar_string(valorTabla, 'lower' if campoTabla != 'descripcion' else 'capitalize')
             else:
-                dataFormateada[campoTabla] = data[campoTabla]
-
-    # Comprobamos si el campo se relaciona con algun modelo (relación One-to-Many o Many-to-Many)
-    for relacion in TablaDeSurfModelo.__mapper__.relationships:
-        # Comprobamos si se relaciona con el moedlo quillas
-        if relacion.mapper.class_ == QuillaModelo and relacion.key in data:
-            # Iterar sobre los elementos de la relación (quillas)
-            for dataQuillas in data[relacion.key]:
-                quillaFormateada = {}
-                # Iterar sobre las columnas del modelo QuillaModelo
-                for columnaQuilla in QuillaModelo.__table__.columns:
-                    campoQuilla = columnaQuilla.name
-                    if campoQuilla in dataQuillas:
-                        # Normalizamos el dato si es de tipo string
-                        if isinstance(columnaQuilla.type, db.String):
-                            quillaFormateada[campoQuilla] = normalizar_string(dataQuillas[campoQuilla], 'lower')
+                dataFormateada[campoTabla] = valorTabla
+        # Verificar si el campo existe como una relacion en el modelo
+        elif campoTabla in relacionesTabla:
+            relacionTabla = relacionesTabla[campoTabla]
+            # Si la relación es con el modelo de Quillas, procesar la lista de quillas
+            if relacionTabla.mapper.class_ == QuillaModelo:
+                for dataQuillas in valorTabla:  # Iterar sobre los elementos relacionados (quillas)
+                    quillaFormateada = {}
+                    # Obtener las columnas del modelo QuillaModelo
+                    columnasQuilla = {columna.name: columna for columna in QuillaModelo.__table__.columns}
+                    for campoQuilla, valorQuilla in dataQuillas.items():
+                        if campoQuilla in columnasQuilla:
+                            columnaQuilla = columnasQuilla[campoQuilla]
+                            # Normalizar el dato si es de tipo string
+                            if isinstance(columnaQuilla.type, db.String):
+                                quillaFormateada[campoQuilla] = normalizar_string(valorQuilla, 'lower')
+                            else:
+                                quillaFormateada[campoQuilla] = valorQuilla
                         else:
-                            quillaFormateada[campoQuilla] = dataQuillas[campoQuilla]
+                            # Manejar el caso en que el campo de quilla no exista en el modelo
+                            return False, {"message": f"El campo de quilla '{campoQuilla}' no existe en el modelo."}
 
-                quillasFormateadas.append(quillaFormateada)
+                    quillasFormateadas.append(quillaFormateada)
 
-            dataFormateada[relacion.key] = quillasFormateadas
+                dataFormateada[campoTabla] = quillasFormateadas
+            else:
+                return False, {"message": f"El campo '{campoTabla}' todavía no existe en relación con su modelo."}
+        else:
+            # Manejar el caso en que el campo no exista ni como columna ni como relación en el modelo
+            return False, {"message": f"El campo de la tabla de surf '{campoTabla}' no existe en el modelo."}
 
     # Validar 'tipo'
     if 'tipo' in dataFormateada:
