@@ -3,7 +3,7 @@ from database import db
 from sqlalchemy.exc import SQLAlchemyError
 from modelos.tabla_surf import TablaDeSurfModelo
 from modelos.tipo_quillas import QuillaModelo
-from rutas.func_aux import normalizar_datos, normalizar_string, consultar_tablas, actualizar_quillas
+from rutas.func_aux import normalizar_datos, normalizar_string, consultar_tablas, actualizar_quillas, crear_quillas
 
 # Crear un Blueprint para las rutas de tablas
 tablas_bp = Blueprint('tablas', __name__)
@@ -58,44 +58,33 @@ def create_tabla():
         if not valido:
             return datosFormateados, 400  # Devolver error de validación si lo hay
 
+        # Crear una nueva tabla de surf con los datos formateados
         nuevaTabla = TablaDeSurfModelo(
-            nombre = datosFormateados['nombre'],
-            marca = datosFormateados['marca'],
-            longitud = datosFormateados['longitud'],
-            ancho = datosFormateados['ancho'],
-            espesor = datosFormateados['espesor'],
-            volumen = datosFormateados['volumen'],
-            tipo = datosFormateados['tipo'],
-            material = datosFormateados['material'],
-            precio = datosFormateados['precio'],
-            estado = datosFormateados['estado'],
-            descripcion = datosFormateados.get('descripcion', '')
+            nombre=datosFormateados['nombre'],
+            marca=datosFormateados['marca'],
+            longitud=datosFormateados['longitud'],
+            ancho=datosFormateados['ancho'],
+            espesor=datosFormateados['espesor'],
+            volumen=datosFormateados['volumen'],
+            tipo=datosFormateados['tipo'],
+            material=datosFormateados['material'],
+            precio=datosFormateados['precio'],
+            estado=datosFormateados['estado'],
+            descripcion=datosFormateados.get('descripcion', '')
         )
-        
+
         db.session.add(nuevaTabla)
         db.session.flush()  # Asegura que nuevaTabla obtenga un ID antes de asociar las quillas
 
         # Manejar el campo 'quillas', si está presente
         quillas_data = datosFormateados.get('quillas', [])
-
-        for quilla in quillas_data:
-            tipo = quilla['tipo']
-            material = quilla.get('material', '')
-            longitud = quilla.get('longitud', '')
-
-            # Creamos el objeto quilla
-            quilla_obj = QuillaModelo(
-                tipo = tipo,
-                material = material,
-                longitud = longitud,
-                tabla_de_surf_id = nuevaTabla.id
-            )
-
-            nuevaTabla.quillas.append(quilla_obj)  # Agregar la quilla a la relación
+        if quillas_data:
+            quillas = crear_quillas(quillas_data, nuevaTabla.id)
+            db.session.bulk_save_objects(quillas)  # Añadir quillas en bloque para mayor eficiencia
 
         db.session.commit()
         return {'message': 'Tabla de surf creada correctamente', 'data': nuevaTabla.to_dict()}, 201
-    
+
     except KeyError as e:
         db.session.rollback()
         return {'error': f'Campo requerido faltante: {str(e)}'}, 400

@@ -184,3 +184,18 @@ def actualizar_quillas(tabla, quillasData):
 
     # Actualizar la relación de la tabla con las quillas procesadas
     tabla.quillas = [quilla for quilla in tabla.quillas if quilla.tipo in tiposProcesados] + quillasNuevas
+
+
+# Realiza la creacion de cada modelo de quilla
+def crear_quillas(quillasData, tabla_id):
+    quillas = []
+
+    for quilla in quillasData:
+        quillas.append(QuillaModelo(
+            tipo=quilla['tipo'],
+            material=quilla.get('material', ''),
+            longitud=quilla.get('longitud', ''),
+            tabla_de_surf_id=tabla_id
+        ))
+
+    return quillas
