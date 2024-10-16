@@ -142,3 +142,45 @@ def consultar_tablas(tabla_id=None, campo=None, valor=None):
     # Si no hay filtros, devuelve todas las tablas
     return TablaDeSurfModelo.query.all()
     
+
+# Realiza la atualizacion del campo quillas en la base de datos
+def actualizar_quillas(tabla, quillasData):
+    quillasExistentes = {quilla.tipo: quilla for quilla in tabla.quillas}
+    quillasNuevas = []
+    tiposProcesados = set()
+
+    for quilla in quillasData:
+        tipo = quilla['tipo']
+        material = quilla.get('material', '')
+        longitud = quilla.get('longitud', '')
+
+        quillaExistente = quillasExistentes.get(tipo)
+        
+        if quillaExistente:
+            # Solo actualiza si hay cambios en el material o longitud
+            if quillaExistente.material != material or quillaExistente.longitud != longitud:
+                quillaExistente.material = material
+                quillaExistente.longitud = longitud
+        else:
+            # Crear nueva quilla si no existe
+            quillaNueva = QuillaModelo(
+                tabla_de_surf_id=tabla.id,
+                tipo=tipo,
+                material=material,
+                longitud=longitud
+            )
+            quillasNuevas.append(quillaNueva)
+
+        tiposProcesados.add(tipo)
+
+    # Eliminar quillas que ya no están en la lista
+    for tipoExistente in list(quillasExistentes):
+        if tipoExistente not in tiposProcesados:
+            db.session.delete(quillasExistentes[tipoExistente])
+
+    # Añadir nuevas quillas
+    if quillasNuevas:
+        db.session.add_all(quillasNuevas)
+
+    # Actualizar la relación de la tabla con las quillas procesadas
+    tabla.quillas = [quilla for quilla in tabla.quillas if quilla.tipo in tiposProcesados] + quillasNuevas

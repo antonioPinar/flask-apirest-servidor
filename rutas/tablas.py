@@ -3,7 +3,7 @@ from database import db
 from sqlalchemy.exc import SQLAlchemyError
 from modelos.tabla_surf import TablaDeSurfModelo
 from modelos.tipo_quillas import QuillaModelo
-from rutas.func_aux import normalizar_datos, consultar_tablas, normalizar_string
+from rutas.func_aux import normalizar_datos, normalizar_string, consultar_tablas, actualizar_quillas
 
 # Crear un Blueprint para las rutas de tablas
 tablas_bp = Blueprint('tablas', __name__)
@@ -121,52 +121,11 @@ def update_tabla(tabla_id):
         if not valido:
             return datosFormateados, 400  # Devolver error de validación si lo hay
 
-        # Manejar el campo 'quillas', si está presente
+        # Actualizar el campo 'quillas', si está presente
         if 'quillas' in datosFormateados:
-            quillas_data = datosFormateados['quillas']
-            quillas_existentes = {quilla.tipo: quilla for quilla in tabla.quillas}
+            actualizar_quillas(tabla, datosFormateados['quillas'])
 
-            quillas_nuevas = []
-            tipos_procesados = set()
-
-            for quilla in quillas_data:
-                tipo = quilla['tipo']
-                material = quilla.get('material', '')
-                longitud = quilla.get('longitud', '')
-
-                if tipo in quillas_existentes:
-                    # Actualizar la quilla existente si los datos son diferentes
-                    quilla_existente = quillas_existentes[tipo]
-                    if quilla_existente.material != material:
-                        quilla_existente.material = material
-
-                    if quilla_existente.longitud != longitud:
-                        quilla_existente.longitud = longitud
-                else:
-                    # Crear una nueva quilla
-                    quilla_nueva = QuillaModelo(
-                        tabla_de_surf_id = tabla.id,
-                        tipo = tipo,
-                        material = material,
-                        longitud = longitud
-                    )
-                    quillas_nuevas.append(quilla_nueva)
-
-                tipos_procesados.add(tipo)
-
-            # Eliminar las quillas que ya no están en la nueva lista
-            for tipo_existente, quilla_existente in quillas_existentes.items():
-                if tipo_existente not in tipos_procesados:
-                    db.session.delete(quilla_existente)
-
-            # Añadir las nuevas quillas
-            if quillas_nuevas:
-                db.session.add_all(quillas_nuevas)
-
-            # Actualizar la relación entre la tabla de surf y las quillas
-            tabla.quillas = [quilla for quilla in tabla.quillas if quilla.tipo in tipos_procesados] + quillas_nuevas
-
-        # Actualizar los campos normalizados
+        # Actualizar los campos normalizados de la tabla, excepto 'quillas'
         for clave, valor in datosFormateados.items():
             if clave != 'quillas' and hasattr(tabla, clave):
                 setattr(tabla, clave, valor)
